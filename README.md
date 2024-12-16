@@ -21,7 +21,7 @@ This document outlines the architecture for managing thousands of distributed 3D
 - Geographic distribution for better latency
 - Independent operation for fault isolation
 
-## Architecture Diagram
+## Printer communication Diagram
 
 ```mermaid
 flowchart TB
@@ -46,6 +46,122 @@ flowchart TB
         P2 -.-> |Connect to assigned| Z2
         P3 -.-> |Connect to assigned| Z3
     end
+```
+
+## System communication Diagram
+
+```mermaid
+flowchart TB
+    subgraph "Content Platform"
+        WEB[Web Frontend] --> |API| AS[Application Server]
+        AS --> |Manages| SDB[(STL Database)]
+        AS --> |Auth| UDB[(User DB)]        
+    end
+
+    AS
+    CS
+
+    subgraph "Control Layer"        
+        
+        CS --> |Manages| DB[(Connection Registry)]
+        CS --> |Routes| LM[Load Manager]
+        
+        %% Print Job Flow
+        CS[Control Server] 
+        PQ[Print Queue Manager]
+        CS -->|"5-Send to Queue"| PQ
+    end
+
+    subgraph "Zrok Frontends"
+        Z1[Zrok Frontend 1\nRegion A]
+        Z2[Zrok Frontend 2\nRegion B]
+    end
+
+    subgraph "Printer Side"
+        P1[Printer 1] --> |Get Frontend URL| CS
+        P1
+        Z1
+        
+        M1[Zrok Agent] <--> A1        
+        A1[Moonraker API] --> P1        
+        Z1 <-.-> |Forward API Calls| M1
+    end
+
+    %% Print Flow
+    WEB --> |1-Select STL| USER((User))
+    USER -->|2-Choose Printer| WEB
+    WEB --> |3-Submit Job| AS
+    AS -->|"4-Print Jobs"| CS
+    PQ -->|"6-Forward to Printer"| Z1
+
+    style WEB fill:#98FB98
+    style AS fill:#FFB6C1
+    style CS fill:#DDA0DD
+    style Z1 fill:#F0E68C
+    style Z2 fill:#F0E68C
+    style PQ fill:#ff9999
+
+    %% Add notes
+    note1[Content website never\nconnects directly\nto printers]
+    note2[Control server manages\nall printer communication]
+    note3[Print jobs queued\nand monitored]
+    
+    note1 -.-> AS
+    note2 -.-> CS
+    note3 -.-> PQ
+	subGraph3
+	
+	subGraph3
+	
+	note3
+	
+	subGraph0 --- n4
+	
+```
+
+## Clarified Print Job Flow
+
+```mermaid
+flowchart TB
+    subgraph "Content Platform"
+        WEB[Web Frontend] --> |API| AS[Application Server]
+        AS --> |Manages| SDB[(STL Database)]
+        AS --> |Auth| UDB[(User DB)]
+        AS --> |1. Job Commands| CS[Control Server]
+    end
+
+    subgraph "Control Layer"
+        CS --> |Manages| DB[(Connection Registry)]
+        CS --> |Routes| LM[Load Manager]
+        
+        %% Print Queue Management
+        PQ[Print Queue Manager]
+        CS --> |2. Schedule Job| PQ
+        PQ --> |3. Status Updates| CS
+    end
+
+    subgraph "Zrok Frontends"
+        Z1[Zrok Frontend 1\nRegion A]
+        Z2[Zrok Frontend 2\nRegion B]
+    end
+
+    subgraph "Printer Side"
+        P1[Printer 1] 
+        M1[Moonraker API] --> P1
+        Z1 -.-> |4. Execute Job| M1
+    end
+
+    style WEB fill:#98FB98
+    style AS fill:#FFB6C1
+    style CS fill:#DDA0DD
+    style PQ fill:#F0E68C
+
+    %% Add notes
+    note1[Job Commands:\n- Start Print\n- Cancel Print\n- Get Status]
+    note2[Queue Operations:\n- Schedule Jobs\n- Manage Priority\n- Handle Retries]
+    
+    note1 -.-> AS
+    note2 -.-> PQ
 ```
 
 ## Key Design Decisions
